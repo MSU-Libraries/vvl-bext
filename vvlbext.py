@@ -18,10 +18,11 @@ class VvlBext():
 
                 if self.new_record(line):
                     print line
-
+                    
                     if self.record_id <> 0:
                         self.create_csv_line()
                     
+                    self.format_types = []
                     self.csv_data = {
                                      "digital_wav_id":"",
                                      "digital_mp3_id":"",
@@ -42,7 +43,7 @@ class VvlBext():
 
         with open(output_file_path, "w") as output:
 
-            output.write("record_id,vvl_number,source_format_id,wav_id,mp3_id,mp3_path,FileName,Description,Originator,OriginationDate,CodingHistory\n")
+            output.write("record_id,vvl_number,source_format_id,wav_id,mp3_id,mp3_path,FileName,Description,Originator,OriginationDate,CodingHistory,AllFormats\n")
             for line in self.output_csv_data:
                 output.write(line+"\n")
 
@@ -56,6 +57,7 @@ class VvlBext():
         self.format_id = row_items[2].replace('"', '').replace("'", "").rstrip().lstrip()
         self.location_name = row_items[3].replace('"', '').replace("'", "").rstrip().lstrip()
         self.format_type = row_items[4].replace('"', '').replace("'", "").rstrip().lstrip()
+        self.format_types.append(self.format_type)
 
     def get_addl_fields(self):
 
@@ -93,7 +95,8 @@ class VvlBext():
                                          self.make_description(),
                                          '"Vincent Voice Library, MSU"',
                                          "[YYYY-MM-DD]",
-                                         self.csv_data["source_recording_specs"]
+                                         self.csv_data["source_recording_specs"],
+                                         "|".join([f for f in set(self.format_types)])
                                          ]))
 
 
