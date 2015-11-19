@@ -1,16 +1,33 @@
 import os
 
-source_file_path = "/Users/higgi135/Projects/vvlbext/vvl_ryan-reconfig-titles.csv"
 problem_records = ["14036", "14041", "14042", "14055", "14061", "14073"]
 
+
 class VvlBext():
+    """Convert data from DBoutput to embed in .wav headers.
+
+    Load MSUL-custom database output into a format suitable for automated
+    transfer to .wav file headers.
+    """
 
     def __init__(self):
+        """Initialize variables."""
         self.record_id = 0
         self.output_csv_data = []
 
 
     def process_csv(self, source_file_path, output_file_path):
+        """Reformat CSV files.
+
+        Take initial CSV and read it in order to collapse identical records
+        from different lines into 1 line; format output data to work with
+        automated tool to add data to .wav headers.
+
+        args:
+            source_file_path(str): CSV file to load, has to match particular
+                                   (peculiar) format.
+            output_file_path(str): any writable file location.
+        """            
 
         with open(source_file_path, "r") as source:
 
@@ -50,6 +67,11 @@ class VvlBext():
 
 
     def get_default_fields(self, line):
+        """Select column data based on line index.
+
+        args:
+            line(str): a line of CSV data, as a string.
+        """
 
         row_items = line.split(",")
         self.record_id = row_items[0].rstrip().replace('"', '').replace("'", "").lstrip()
@@ -60,6 +82,7 @@ class VvlBext():
         self.format_types.append(self.format_type)
 
     def get_addl_fields(self):
+        """Pull out additional fields based on conditionals."""
 
         if self.format_id.startswith("DB") and self.format_type == "wav":
             self.csv_data["digital_wav_path"] = os.path.join(self.location_name.replace("DarkArchive", "archives"), self.format_id + ".wav")
@@ -74,6 +97,17 @@ class VvlBext():
             self.csv_data["analogue_id"] = self.format_id
 
     def new_record(self, line):
+        """Check if each new line ID matches the current record ID.
+
+        If the line doesn't match the record ID established on the previous
+        line, then consider this line to be data about a new record.
+
+        args:
+            line(str): 1 line (as a string) of CSV data.
+
+        returns:
+            (bool): True if the line matches the previous, False if not.
+        """
         
         if line.split(",")[0].rstrip().replace('"', '').replace("'", "").lstrip() == self.record_id:
 
@@ -84,6 +118,7 @@ class VvlBext():
             return True
 
     def create_csv_line(self):
+        """Create line of output CSV data."""
 
         self.output_csv_data.append(",".join([self.record_id, 
                                          self.vvl_number, 
