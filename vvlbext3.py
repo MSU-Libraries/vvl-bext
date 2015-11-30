@@ -2,6 +2,7 @@
 
 import os
 import csv
+from datetime import datetime
 
 problem_records = ["14036", "14041", "14042", "14055", "14061", "14073"]
 
@@ -19,7 +20,6 @@ class VvlBext():
         self.output_csv_data = []
         self.error_records = []
 
-
     def process_csv(self, source_file_path, output_file_path):
         """Reformat CSV files.
 
@@ -31,8 +31,7 @@ class VvlBext():
             source_file_path(str): CSV file to load, has to match particular
                                    (peculiar) format.
             output_file_path(str): any writable file location.
-        """            
-
+        """
         with open(source_file_path, "r", encoding="latin-1") as csvfile:
             vvlreader = csv.DictReader(csvfile)
             for row in vvlreader:
@@ -40,24 +39,23 @@ class VvlBext():
                     if int(row["record_id"]) % 1000 == 0:
                         print("Processed {0} rows".format(row["record_id"]))
                     if self.new_record(row):
-                        
+
                         if self.record_id != 0:
                             self.create_csv_line()
-                        
+
                         self.format_types = []
                         self.physical_types = []
                         self.csv_data = {
-                                         "digital_wav_id":"",
-                                         "digital_mp3_id":"",
-                                         "analogue_id":"",
+                                         "digital_wav_id": "",
+                                         "digital_mp3_id": "",
+                                         "analogue_id": "",
                                          "digital_wav_path": "",
                                          "digital_mp3_path": "",
                                          "source_recording_specs": "",
-                                         "physical_format": "",
-                        }              
+                                         "physical_format": ""}
                         self.get_default_fields(row)
                         self.get_addl_fields()
-                    
+
                     else:
 
                         self.get_default_fields(row)
@@ -67,21 +65,17 @@ class VvlBext():
 
                     self.error_records.append(row["record_id"])
 
-
         with open(output_file_path, "w") as csvfile:
-            fieldnames = ["Filename", "Description", "Originator", "CodingHistory",
-                          "IARL", "IART", "ICMT", "ICRD", "IMED", "ISRC", "ISRF"]
+            fieldnames = ["Filename", "Description", "Originator",
+                          "CodingHistory", "IARL", "IART", "ICMT",
+                          "ICRD", "IMED", "ISRC", "ISRF"]
             csvwriter = csv.DictWriter(csvfile, fieldnames=fieldnames)
             csvwriter.writeheader()
             for record in self.output_csv_data:
                 csvwriter.writerow(record)
-            #output.write("record_id,vvl_number,source_format_id,wav_id,mp3_id,mp3_path,FileName,Description,Originator,OriginationDate,CodingHistory,AllFormats\n")
-            #for line in self.output_csv_data:
-            #    output.write(line+"\n")
 
         for error in self.error_records:
             print("Error processing row with ID {0}".format(error))
-
 
     def get_default_fields(self, row):
         """Select column data based on line index.
@@ -89,15 +83,20 @@ class VvlBext():
         args:
             line(str): a line of CSV data, as a string.
         """
-        self.record_id = row["record_id"].rstrip().replace('"', '').replace("'", "").lstrip()
-        self.vvl_number = row["vvl_number"].replace('"', '').replace("'", "").rstrip().lstrip()
-        self.format_id = row["formatid"].replace('"', '').replace("'", "").rstrip().lstrip()
-        self.location_name = row["location_name"].replace('"', '').replace("'", "").rstrip().lstrip()
-        self.format_type = row["formattype_name"].replace('"', '').replace("'", "").rstrip().lstrip()
+        self.record_id = row["record_id"].replace('"', '')\
+                                         .replace("'", "").strip()
+        self.vvl_number = row["vvl_number"].replace('"', '')\
+                                           .replace("'", "").strip()
+        self.format_id = row["formatid"].replace('"', '')\
+                                        .replace("'", "").strip()
+        self.location_name = row["location_name"].replace('"', '')\
+                                                 .replace("'", "").strip()
+        self.format_type = row["formattype_name"].replace('"', '')\
+                                                 .replace("'", "").strip()
         self.main_speaker = row["main_speaker"].strip()
         self.addl_speakers = row["additional_speakers"].strip()
         self.summary = row["summary"].strip()
-        self.date_fixed = row["date_fixed"].strip()
+        self.date_fixed = self.get_date(row["date_fixed"])
         self.recording_source = row["recording_source"].strip()
         self.is_physical = row["is_physical"]
         self.format_types.append(self.format_type)
@@ -121,8 +120,6 @@ class VvlBext():
             self.physical_types.append(self.format_type)
             self.csv_data["physical_format"] = self.format_type
 
-
-
     def new_record(self, row):
         """Check if each new line ID matches the current record ID.
 
@@ -135,7 +132,6 @@ class VvlBext():
         returns:
             (bool): True if the line matches the previous, False if not.
         """
-        
         if row["record_id"].rstrip().replace('"', '').replace("'", "").lstrip() == self.record_id:
 
             return False
@@ -157,9 +153,9 @@ class VvlBext():
                                               self.addl_speakers] if s != ""]),
                             "ICMT": self.summary,
                             "ICRD": self.date_fixed,
-                            "IMED": "; ".join(self.format_types),
+                            "IMED": "; ".join([t for t in self.format_types if t not in ["wav", "mp3"]]),
                             "ISRC": self.recording_source,
-                            "ISRF": "; ".join(self.physical_types),
+                            "ISRF": "; ".join([p for p in self.physical_types if p not in ["cd", "dat-tape"]]),
 
                            }
 
@@ -200,18 +196,32 @@ class VvlBext():
 
     def get_physical_format(self):
 
-        phys_format = self.csv_data["physical_format"]
-        if  phys_format != "":
-            if phys_format == "cd":
-                return phys_format
+        if len(self.physical_types) > 0:
+            # Just grabbing 1 physical format!
+            phys_format = self.physical_types[0]
+            if phys_format == "cd" or phys_format == "dat-tape":
+                phys_codes = {"cd": "compact disc",
+                              "dat-tape": "digital audio tape"}
+                return "A=DIGITAL-UNKNOWN; {0}".format(phys_codes[phys_format])
             else:
                 return "A=ANALOG; {0}".format(phys_format)
 
         else:
             return "null"
 
+    def get_date(self, date):
+        """Process date into correct format.
 
+        args:
+            date(str): date string, usually in mm/dd/yyyy format.
+        """
+        if "-" in date or "unknown" in date or date == "":
+            return date.strip()
+        else:
+            input_format = "%m/%d/%y"
+            date_object = datetime.strptime(date, input_format)
+            if date_object.year > 15:
+                date_object = date_object.replace(year=date_object.year-100)
+                print(date_object.isoformat())
 
-
-
-
+        return date_object.isoformat()
