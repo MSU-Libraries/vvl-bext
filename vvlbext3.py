@@ -3,6 +3,7 @@
 import os
 import csv
 from datetime import datetime
+import time
 
 problem_records = ["14036", "14041", "14042", "14055", "14061", "14073"]
 
@@ -32,15 +33,16 @@ class VvlBext():
                                    (peculiar) format.
             output_file_path(str): any writable file location.
         """
-        with open(source_file_path, "r", encoding="latin-1") as csvfile:
+        with open(source_file_path, "r", encoding="utf-8") as csvfile:
             vvlreader = csv.DictReader(csvfile)
             for row in vvlreader:
                 if row["record_id"].isdigit():
                     if int(row["record_id"]) % 1000 == 0:
                         print("Processed {0} rows".format(row["record_id"]))
                     if self.new_record(row):
-
-                        if self.record_id != 0:
+                        # Create row now from *previous* row's data
+                        # if new row is encountered.
+                        if self.record_id != 0 and self.csv_data["digital_wav_path"]:
                             self.create_csv_line()
 
                         self.format_types = []
@@ -66,9 +68,9 @@ class VvlBext():
                     self.error_records.append(row["record_id"])
 
         with open(output_file_path, "w") as csvfile:
-            fieldnames = ["Filename", "Description", "Originator",
-                          "CodingHistory", "IARL", "IART", "ICMT",
-                          "ICRD", "IMED", "ISRC", "ISRF"]
+            fieldnames = ["FileName", "Description", "Originator",
+                          "CodingHistory", "IARL", "IART",
+                          "ICRD", "IMED", "ISRC", "ISRF", "BirthDate", "ChangeDate", "ModifyDate", "AccessDate"]
             csvwriter = csv.DictWriter(csvfile, fieldnames=fieldnames)
             csvwriter.writeheader()
             for record in self.output_csv_data:
@@ -143,19 +145,29 @@ class VvlBext():
     def create_csv_line(self):
         """Create line of output CSV data."""
 
-
-        self.output_row = {"Filename": self.csv_data["digital_wav_path"],
+        codenames = {"cd": "compact disc",
+                     "cassette": "audiocassette",
+                     "open-reel": "open reel tape",
+                     "dat-tape": "digital audio tape",
+                     "videotape": "videotape",
+                     }
+        file_dates = self.get_file_dates()
+        self.output_row = {"FileName": self.csv_data["digital_wav_path"],
                            "Description":self.make_description(),
                            "Originator":"Vincent Voice Library, MSU",
                            "CodingHistory": self.get_physical_format(),
                            "IARL": "US, MSU/VVL",
                            "IART": '; '.join([s for s in [self.main_speaker, 
                                               self.addl_speakers] if s != ""]),
-                            "ICMT": self.summary,
+                            # "ICMT": self.summary.replace("\n", ""),
                             "ICRD": self.date_fixed,
-                            "IMED": "; ".join([t for t in self.format_types if t not in ["wav", "mp3"]]),
+                            "BirthDate": file_dates["birth"],
+                            "ChangeDate": file_dates["c"],
+                            "ModifyDate": file_dates["m"],
+                            "AccessDate": file_dates["a"],
+                            "IMED": "; ".join([codenames[t] for t in self.format_types if t not in ["", "wav", "mp3", "unknown"]]),
                             "ISRC": self.recording_source,
-                            "ISRF": "; ".join([p for p in self.physical_types if p not in ["cd", "dat-tape"]]),
+                            "ISRF": "; ".join([codenames[p] for p in self.physical_types if p not in ["", "cd", "dat-tape", "unknown"]]),
 
                            }
 
@@ -176,6 +188,30 @@ class VvlBext():
         """
         self.output_csv_data.append(self.output_row)
 
+    def get_file_dates(self):
+        """Check each wav file for pertinent date."""
+        times = {"a": 'null',
+                 "c": 'null',
+                 "m": 'null',
+                 "birth": 'null'}
+        if "digital_wav_id" in self.csv_data:
+
+            file_path = os.path.join("/Volumes/ryanvvl", self.csv_data["digital_wav_id"]+".wav")
+            if os.path.isfile(file_path):
+                stats = os.stat(file_path)
+                times["a"] = self.convert_time(stats.st_atime)
+                times["c"] = self.convert_time(stats.st_ctime)
+                times["m"] = self.convert_time(stats.st_mtime)
+                times["birth"] = self.convert_time(stats.st_birthtime)
+
+        return times
+
+    def convert_time(self, seconds):
+      """Convert seconds into iso-format date string.
+
+      seconds(float): representation of time in seconds.
+      """
+      return time.strftime("%Y-%m-%d", time.localtime(seconds))
 
     def make_description(self):
 
@@ -199,12 +235,12 @@ class VvlBext():
         if len(self.physical_types) > 0:
             # Just grabbing 1 physical format!
             phys_format = self.physical_types[0]
-            if phys_format == "cd" or phys_format == "dat-tape":
-                phys_codes = {"cd": "compact disc",
-                              "dat-tape": "digital audio tape"}
-                return "A=DIGITAL-UNKNOWN; {0}".format(phys_codes[phys_format])
-            else:
-                return "A=ANALOG; {0}".format(phys_format)
+            phys_codes = {"cd": "compact disc",
+                 "cassette": "audiocassette",
+                 "open-reel": "open reel tape",
+                 "dat-tape": "digital audio tape",
+                 "videotape": "videotape",}
+            return "A=DIGITAL; {0}".format(phys_codes[phys_format])
 
         else:
             return "null"
